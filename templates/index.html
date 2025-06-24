@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Seleção de Pontos de Plantio - UFSCar</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Google Material Icons -->
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <!-- SweetAlert2 -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <!-- Google Maps API -->
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyB-blpayEPid6a9cqNajxJhzaMPCyZldwc"></script>
+    <!-- ROSLIBJS -->
+    <script src="https://cdn.jsdelivr.net/npm/roslib/build/roslib.min.js"></script>
+
+    <style>
+        #map {
+            height: 500px;
+            width: 100%;
+            border: 1px solid #ccc;
+            margin-bottom: 15px;
+        }
+        .point-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 5px 10px;
+            margin-bottom: 5px;
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body class="container py-4">
+
+    <h2 class="mb-4">🌱 Seleção de Pontos de Plantio - UFSCar</h2>
+
+    <div id="map"></div>
+
+    <div class="mb-3">
+        <label for="species" class="form-label">Espécie para o próximo ponto:</label>
+        <select id="species" class="form-select">
+            <option value="Arvore_A">🌳 Árvore A</option>
+            <option value="Arvore_B">🌲 Árvore B</option>
+            <option value="Arvore_C">🌴 Árvore C</option>
+        </select>
+    </div>
+
+    <div class="mb-3">
+        <label for="kml-upload" class="form-label">📂 Importar pontos de um arquivo KML:</label>
+        <input type="file" id="kml-upload" accept=".kml" class="form-control">
+    </div>
+    <div class="mb-3">
+        <button id="download-kml-btn" class="btn btn-primary" onclick="downloadKML()" style="display: none;">
+            <span class="material-icons">download</span> Baixar KML das Mudas Plantadas
+        </button>
+    </div>
+
+
+    <div class="mb-3">
+        <button class="btn btn-success" onclick="submitPoints()">
+            <span class="material-icons">send</span> Enviar todos os pontos
+        </button>
+        <button class="btn btn-secondary" onclick="clearAllPoints()">
+            <span class="material-icons">delete_sweep</span> Limpar todos
+        </button>
+    </div>
+
+    <h4>Pontos Selecionados:</h4>
+    <div id="points-list" class="mb-3"></div>
+
+    <script>
+        let map;
+        let selectedPoints = [];
+        let markers = [];
+        let droneMarker;
+        let droneLatLng;
+        let plantedPoints = [];
+
+        const droneIcon = {
+            url: 'https://img.icons8.com/ios-filled/50/000000/drone.png',
+            scaledSize: new google.maps.Size(32, 32),
+            anchor: new google.maps.Point(16, 16)
+        };
+
+        function initMap() {
+            const ufscar = { lat: 47.3977433, lng: 8.5455272 };
+            map = new google.maps.Map(document.getElementById('map'), {
+                center: ufscar,
+                zoom: 16
+            });
+
+            map.addListener('click', function(event) {
+                addPoint(event.latLng);
+            });
+        }
+
+        function addPoint(latLng) {
+            const species = document.getElementById('species').value;
+
+            const marker = new google.maps.Marker({
+                position: latLng,
+                map: map,
+                title: species,
+                animation: google.maps.Animation.DROP,
+                icon: 'http://maps.google.com/mapfiles/ms/icons/green-dot.png'
+            });
+
+            selectedPoints.push({
+                lat: latLng.lat(),
+                lng: latLng.lng(),
+                species: species,
+                marker: marker
+            });
+
+            markers.push(marker);
+            updatePointsList();
+            fitMapToPoints();
+        }
+
+        function deletePoint(index) {
+            selectedPoints[index].marker.setMap(null);
+            selectedPoints.splice(index, 1);
+            updatePointsList();
+            fitMapToPoints();
+        }
+
+        function clearAllPoints() {
+            markers.forEach(marker => marker.setMap(null));
+            selectedPoints = [];
+            markers = [];
+            updatePointsList();
+        }
+
+        function updatePointsList() {
+            const listDiv = document.getElementById('points-list');
+            listDiv.innerHTML = '';
+
+            selectedPoints.forEach((point, index) => {
+                const item = document.createElement('div');
+                item.className = 'point-item';
+                item.innerHTML = `
+                    <span>(${point.lat.toFixed(5)}, ${point.lng.toFixed(5)}) - ${point.species}</span>
+                    <button class="btn btn-sm btn-danger" onclick="deletePoint(${index})">
+                        <span class="material-icons">delete</span>
+                    </button>
+                `;
+                listDiv.appendChild(item);
+            });
+        }
+
+        function fitMapToPoints() {
+            if (selectedPoints.length === 0) return;
+
+            const bounds = new google.maps.LatLngBounds();
+            selectedPoints.forEach(p => {
+                bounds.extend(new google.maps.LatLng(p.lat, p.lng));
+            });
+
+            map.fitBounds(bounds);
+        }
+
+        function submitPoints() {
+            if (selectedPoints.length === 0) {
+                Swal.fire('Nenhum ponto selecionado', 'Adicione ou importe pontos antes de enviar.', 'warning');
+                return;
+            }
+
+            const payload = selectedPoints.map(p => ({
+                lat: p.lat,
+                lng: p.lng,
+                species: p.species
+            }));
+            final_payload = {payload, droneLatLng}
+            Swal.fire({
+                title: 'Enviar pontos?',
+                text: `Você está prestes a enviar ${payload.length} pontos.`,
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: 'Enviar',
+                cancelButtonText: 'Cancelar'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    fetch('/submit_points', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(final_payload)
+                    })
+                    .then(response => {
+                        if (response.ok) {
+                            Swal.fire('Sucesso!', 'Pontos enviados ao servidor.', 'success');
+                            clearAllPoints();
+                        } else {
+                            Swal.fire('Erro!', 'Falha ao enviar os pontos.', 'error');
+                        }
+                    });
+                }
+            });
+        }
+
+        document.getElementById('kml-upload').addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const parser = new DOMParser();
+                const kml = parser.parseFromString(e.target.result, 'text/xml');
+                const placemarks = kml.getElementsByTagName('Placemark');
+
+                let importedCount = 0;
+
+                for (let i = 0; i < placemarks.length; i++) {
+                    const nameTag = placemarks[i].getElementsByTagName('name')[0];
+                    const coordsTag = placemarks[i].getElementsByTagName('coordinates')[0];
+
+                    if (coordsTag) {
+                        const coordsText = coordsTag.textContent.trim();
+                        const [lng, lat] = coordsText.split(',').map(Number);
+                        const species = nameTag ? nameTag.textContent.trim() : "Desconhecida";
+
+                        const latLng = new google.maps.LatLng(lat, lng);
+
+                        const marker = new google.maps.Marker({
+                            position: latLng,
+                            map: map,
+                            title: species,
+                            animation: google.maps.Animation.DROP,
+                            icon: 'http://maps.google.com/mapfiles/ms/icons/blue-dot.png'
+                        });
+
+                        selectedPoints.push({
+                            lat: lat,
+                            lng: lng,
+                            species: species,
+                            marker: marker
+                        });
+
+                        markers.push(marker);
+                        importedCount++;
+                    }
+                }
+
+                updatePointsList();
+                fitMapToPoints();
+                Swal.fire('Importação concluída', `${importedCount} pontos adicionados do KML.`, 'success');
+            };
+
+            reader.readAsText(file);
+        });
+
+        // ROS WebSocket connection and GPS live update
+        window.onload = function() {
+            initMap();
+
+            const ros = new ROSLIB.Ros({
+                url : 'ws://localhost:9090' // Change if needed
+            });
+
+            ros.on('connection', function() {
+                console.log('Connected to ROSBridge WebSocket server.');
+            });
+
+            ros.on('error', function(error) {
+                console.error('Error connecting to ROSBridge: ', error);
+            });
+
+            ros.on('close', function() {
+                console.warn('Connection to ROSBridge closed.');
+            });
+
+            const gpsListener = new ROSLIB.Topic({
+                ros : ros,
+                name : '/web_gps_stream', // Adjust topic name if needed
+                messageType : 'std_msgs/String'
+            });
+
+            const mudaListener = new ROSLIB.Topic({
+                ros: ros,
+                name : '/muda_alert',
+                messageType: 'std_msgs/String'
+            })
+
+            gpsListener.subscribe(function(message) {
+                const data = JSON.parse(message.data);
+                droneLatLng = new google.maps.LatLng(data.lat, data.lon);
+
+                if (!droneMarker) {
+                    droneMarker = new google.maps.Marker({
+                        position: droneLatLng,
+                        map: map,
+                        title: 'Drone Atual',
+                        icon: droneIcon
+                    });
+                } else {
+                    droneMarker.setPosition(droneLatLng);
+                }
+            });
+
+            mudaListener.subscribe(function(message){
+                const data = JSON.parse(message.data)
+                const name = data
+                
+                mudaMarker =new google.maps.Marker({
+                    position: droneLatLng,
+                    map: map,
+                    title: name,
+                    icon: 'https://maps.gstatic.com/mapfiles/ms2/micons/tree.png'
+
+                });
+
+                plantedPoints.push({
+                lat: droneLatLng.lat(),
+                lng: droneLatLng.lng(),
+                species: name
+                 });
+
+                document.getElementById('download-kml-btn').style.display = 'inline-block';
+
+
+            })
+        };
+
+        function downloadKML() {
+            if (plantedPoints.length === 0) {
+                Swal.fire('Nenhuma muda plantada', 'Nenhum ponto disponível para exportação.', 'warning');
+                return;
+            }
+
+            let kml = `<?xml version="1.0" encoding="UTF-8"?>
+            <kml xmlns="http://www.opengis.net/kml/2.2">
+            <Document>\n`;
+
+            plantedPoints.forEach((point, index) => {
+                kml += `
+            <Placemark>
+            <name>${point.species}</name>
+            <Point>
+                <coordinates>${point.lng},${point.lat},0</coordinates>
+            </Point>
+            </Placemark>\n`;
+            });
+
+            kml += `  </Document>
+            </kml>`;
+
+            const blob = new Blob([kml], { type: 'application/vnd.google-earth.kml+xml' });
+            const url = URL.createObjectURL(blob);
+
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'mudas_plantadas.kml';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+    </script>
+
+</body>
+</html>
