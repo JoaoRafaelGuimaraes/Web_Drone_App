@@ -1,365 +1,282 @@
+
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-    <meta charset="UTF-8">
-    <title>Seleção de Pontos de Plantio - UFSCar</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8">
+  <title>Seleção de Pontos de Plantio - UFSCar</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <!-- Bootstrap CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- Google Material Icons -->
-    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
-    <!-- SweetAlert2 -->
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    <!-- Google Maps API -->
-    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyB-blpayEPid6a9cqNajxJhzaMPCyZldwc"></script>
-    <!-- ROSLIBJS -->
-    <script src="https://cdn.jsdelivr.net/npm/roslib/build/roslib.min.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyB-blpayEPid6a9cqNajxJhzaMPCyZldwc&libraries=drawing"></script>
+  <script src="https://cdn.jsdelivr.net/npm/roslib/build/roslib.min.js"></script>
 
-    <style>
-        #map {
-            height: 500px;
-            width: 100%;
-            border: 1px solid #ccc;
-            margin-bottom: 15px;
-        }
-        .point-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 5px 10px;
-            margin-bottom: 5px;
-            background-color: #f8f9fa;
-            border: 1px solid #dee2e6;
-            border-radius: 4px;
-        }
-    </style>
+  <style>
+    #map {
+      height: 500px;
+      width: 100%;
+      border: 1px solid #ccc;
+      margin-bottom: 15px;
+    }
+
+    .point-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 5px 10px;
+      margin-bottom: 5px;
+      background-color: #f8f9fa;
+      border: 1px solid #dee2e6;
+      border-radius: 4px;
+    }
+
+    #toggle-mode-btn {
+      transition: all 0.3s ease;
+    }
+  </style>
 </head>
 <body class="container py-4">
 
-    <h2 class="mb-4">🌱 Seleção de Pontos de Plantio - UFSCar</h2>
+<h2 class="mb-4">🌱 Seleção de Pontos de Plantio - UFSCar</h2>
 
-    <div id="map"></div>
+<div id="map"></div>
 
-    <div class="mb-3">
-        <label for="species" class="form-label">Espécie para o próximo ponto:</label>
-        <select id="species" class="form-select">
-            <option value="Arvore_A">🌳 Árvore A</option>
-            <option value="Arvore_B">🌲 Árvore B</option>
-            <option value="Arvore_C">🌴 Árvore C</option>
-        </select>
-    </div>
+<div class="mb-3">
+  <label for="species" class="form-label">Espécie para o próximo ponto:</label>
+  <select id="species" class="form-select">
+    <option value="Pequi">🌳 Pequi</option>
+    <option value="Baru">🌲 Baru</option>
+    <option value="Capim">🌴 Capim</option>
+  </select>
+</div>
 
-    <div class="mb-3">
-        <label for="kml-upload" class="form-label">📂 Importar pontos de um arquivo KML:</label>
-        <input type="file" id="kml-upload" accept=".kml" class="form-control">
-    </div>
-    <div class="mb-3">
-        <button id="download-kml-btn" class="btn btn-primary" onclick="downloadKML()" style="display: none;">
-            <span class="material-icons">download</span> Baixar KML das Mudas Plantadas
-        </button>
-    </div>
+<div class="mb-3">
+  <button id="toggle-mode-btn" class="btn btn-outline-primary" onclick="toggleDrawingMode()">🔁 Trocar para polígono</button>
+  <button class="btn btn-outline-danger ms-2" onclick="deletePolygon()">🗑️ Excluir polígono</button>
+</div>
 
+<div class="mb-3">
+  <button class="btn btn-info" onclick="submitPolygon()">
+    <span class="material-icons">polyline</span> Enviar polígono
+  </button>
+</div>
 
-    <div class="mb-3">
-        <button class="btn btn-success" onclick="submitPoints()">
-            <span class="material-icons">send</span> Enviar todos os pontos
-        </button>
-        <button class="btn btn-secondary" onclick="clearAllPoints()">
-            <span class="material-icons">delete_sweep</span> Limpar todos
-        </button>
-    </div>
+<div class="mb-3">
+  <button class="btn btn-success" onclick="submitPoints()">
+    <span class="material-icons">send</span> Enviar todos os pontos
+  </button>
+  <button class="btn btn-secondary" onclick="clearAllPoints()">
+    <span class="material-icons">delete_sweep</span> Limpar todos
+  </button>
+</div>
 
-    <h4>Pontos Selecionados:</h4>
-    <div id="points-list" class="mb-3"></div>
+<h4>Pontos Selecionados:</h4>
+<div id="points-list" class="mb-3"></div>
 
-    <script>
-        let map;
-        let selectedPoints = [];
-        let markers = [];
-        let droneMarker;
-        let droneLatLng;
-        let plantedPoints = [];
+<script>
+  let map;
+  let selectedPoints = [], markers = [], plantedPoints = [];
+  let droneMarker, droneLatLng;
+  let drawingManager, drawingPolygon = null, drawMode = "point";
+  let polygonInfoWindow;
 
-        const droneIcon = {
-            url: 'https://img.icons8.com/ios-filled/50/000000/drone.png',
-            scaledSize: new google.maps.Size(32, 32),
-            anchor: new google.maps.Point(16, 16)
-        };
+  const droneIcon = {
+    url: 'https://img.icons8.com/ios-filled/50/000000/drone.png',
+    scaledSize: new google.maps.Size(32, 32),
+    anchor: new google.maps.Point(16, 16)
+  };
 
-        function initMap() {
-            const ufscar = { lat: 47.3977433, lng: 8.5455272 };
-            map = new google.maps.Map(document.getElementById('map'), {
-                center: ufscar,
-                zoom: 16
-            });
+  function initMap() {
+    const ufscar = { lat: -21.986218, lng: -47.879738 };
+    map = new google.maps.Map(document.getElementById('map'), {
+      center: ufscar,
+      zoom: 17
+    });
 
-            map.addListener('click', function(event) {
-                addPoint(event.latLng);
-            });
-        }
+    drawingManager = new google.maps.drawing.DrawingManager({
+      drawingMode: null,
+      drawingControl: false,
+      polygonOptions: {
+        fillColor: '#ffff00', fillOpacity: 0.3,
+        strokeWeight: 2, clickable: true,
+        editable: true, zIndex: 1
+      }
+    });
+    drawingManager.setMap(map);
 
-        function addPoint(latLng) {
-            const species = document.getElementById('species').value;
+    google.maps.event.addListener(drawingManager, 'polygoncomplete', function (polygon) {
+      if (drawingPolygon) drawingPolygon.setMap(null);
+      drawingPolygon = polygon;
+      drawingManager.setDrawingMode(null);
+      drawMode = "point";
+      updateToggleButton();
 
-            const marker = new google.maps.Marker({
-                position: latLng,
-                map: map,
-                title: species,
-                animation: google.maps.Animation.DROP,
-                icon: 'http://maps.google.com/mapfiles/ms/icons/green-dot.png'
-            });
+      polygon.customData = { Pequi: 0, Baru: 0, Capim: 0 };
+      polygon.addListener('click', function (event) {
+        if (polygonInfoWindow) polygonInfoWindow.close();
 
-            selectedPoints.push({
-                lat: latLng.lat(),
-                lng: latLng.lng(),
-                species: species,
-                marker: marker
-            });
+        const content = `
+          <div class="p-2">
+            <h6 class="mb-2">🌿 Espécies no Polígono</h6>
+            <div class="mb-2">
+              <label class="form-label">Pequi:</label>
+              <input type="number" class="form-control" id="pequi-count" value="${polygon.customData.Pequi}" min="0">
+            </div>
+            <div class="mb-2">
+              <label class="form-label">Baru:</label>
+              <input type="number" class="form-control" id="baru-count" value="${polygon.customData.Baru}" min="0">
+            </div>
+            <div class="mb-2">
+              <label class="form-label">Capim:</label>
+              <input type="number" class="form-control" id="capim-count" value="${polygon.customData.Capim}" min="0">
+            </div>
+            <button class="btn btn-sm btn-primary w-100" onclick="savePolygonData()">Salvar</button>
+          </div>
+        `;
 
-            markers.push(marker);
-            updatePointsList();
-            fitMapToPoints();
-        }
-
-        function deletePoint(index) {
-            selectedPoints[index].marker.setMap(null);
-            selectedPoints.splice(index, 1);
-            updatePointsList();
-            fitMapToPoints();
-        }
-
-        function clearAllPoints() {
-            markers.forEach(marker => marker.setMap(null));
-            selectedPoints = [];
-            markers = [];
-            updatePointsList();
-        }
-
-        function updatePointsList() {
-            const listDiv = document.getElementById('points-list');
-            listDiv.innerHTML = '';
-
-            selectedPoints.forEach((point, index) => {
-                const item = document.createElement('div');
-                item.className = 'point-item';
-                item.innerHTML = `
-                    <span>(${point.lat.toFixed(5)}, ${point.lng.toFixed(5)}) - ${point.species}</span>
-                    <button class="btn btn-sm btn-danger" onclick="deletePoint(${index})">
-                        <span class="material-icons">delete</span>
-                    </button>
-                `;
-                listDiv.appendChild(item);
-            });
-        }
-
-        function fitMapToPoints() {
-            if (selectedPoints.length === 0) return;
-
-            const bounds = new google.maps.LatLngBounds();
-            selectedPoints.forEach(p => {
-                bounds.extend(new google.maps.LatLng(p.lat, p.lng));
-            });
-
-            map.fitBounds(bounds);
-        }
-
-        function submitPoints() {
-            if (selectedPoints.length === 0) {
-                Swal.fire('Nenhum ponto selecionado', 'Adicione ou importe pontos antes de enviar.', 'warning');
-                return;
-            }
-
-            const payload = selectedPoints.map(p => ({
-                lat: p.lat,
-                lng: p.lng,
-                species: p.species
-            }));
-            final_payload = {payload, droneLatLng}
-            Swal.fire({
-                title: 'Enviar pontos?',
-                text: `Você está prestes a enviar ${payload.length} pontos.`,
-                icon: 'question',
-                showCancelButton: true,
-                confirmButtonText: 'Enviar',
-                cancelButtonText: 'Cancelar'
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    fetch('/submit_points', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(final_payload)
-                    })
-                    .then(response => {
-                        if (response.ok) {
-                            Swal.fire('Sucesso!', 'Pontos enviados ao servidor.', 'success');
-                            clearAllPoints();
-                        } else {
-                            Swal.fire('Erro!', 'Falha ao enviar os pontos.', 'error');
-                        }
-                    });
-                }
-            });
-        }
-
-        document.getElementById('kml-upload').addEventListener('change', function(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                const parser = new DOMParser();
-                const kml = parser.parseFromString(e.target.result, 'text/xml');
-                const placemarks = kml.getElementsByTagName('Placemark');
-
-                let importedCount = 0;
-
-                for (let i = 0; i < placemarks.length; i++) {
-                    const nameTag = placemarks[i].getElementsByTagName('name')[0];
-                    const coordsTag = placemarks[i].getElementsByTagName('coordinates')[0];
-
-                    if (coordsTag) {
-                        const coordsText = coordsTag.textContent.trim();
-                        const [lng, lat] = coordsText.split(',').map(Number);
-                        const species = nameTag ? nameTag.textContent.trim() : "Desconhecida";
-
-                        const latLng = new google.maps.LatLng(lat, lng);
-
-                        const marker = new google.maps.Marker({
-                            position: latLng,
-                            map: map,
-                            title: species,
-                            animation: google.maps.Animation.DROP,
-                            icon: 'http://maps.google.com/mapfiles/ms/icons/blue-dot.png'
-                        });
-
-                        selectedPoints.push({
-                            lat: lat,
-                            lng: lng,
-                            species: species,
-                            marker: marker
-                        });
-
-                        markers.push(marker);
-                        importedCount++;
-                    }
-                }
-
-                updatePointsList();
-                fitMapToPoints();
-                Swal.fire('Importação concluída', `${importedCount} pontos adicionados do KML.`, 'success');
-            };
-
-            reader.readAsText(file);
+        polygonInfoWindow = new google.maps.InfoWindow({
+          content: content,
+          position: event.latLng
         });
+        polygonInfoWindow.open(map);
+      });
+    });
 
-        // ROS WebSocket connection and GPS live update
-        window.onload = function() {
-            initMap();
+    map.addListener('click', function (event) {
+      if (drawMode === "point") addPoint(event.latLng);
+    });
+  }
 
-            const ros = new ROSLIB.Ros({
-                url : 'ws://localhost:9090' // Change if needed
-            });
+  function savePolygonData() {
+    if (!drawingPolygon) return;
+    drawingPolygon.customData = {
+      Pequi: parseInt(document.getElementById('pequi-count').value) || 0,
+      Baru: parseInt(document.getElementById('baru-count').value) || 0,
+      Capim: parseInt(document.getElementById('capim-count').value) || 0
+    };
+    polygonInfoWindow.close();
+  }
 
-            ros.on('connection', function() {
-                console.log('Connected to ROSBridge WebSocket server.');
-            });
+  function toggleDrawingMode() {
+    drawMode = drawMode === "point" ? "polygon" : "point";
+    drawingManager.setDrawingMode(drawMode === "polygon" ? google.maps.drawing.OverlayType.POLYGON : null);
+    updateToggleButton();
+  }
 
-            ros.on('error', function(error) {
-                console.error('Error connecting to ROSBridge: ', error);
-            });
+  function updateToggleButton() {
+    const btn = document.getElementById('toggle-mode-btn');
+    if (drawMode === "polygon") {
+      btn.classList.remove('btn-outline-primary');
+      btn.classList.add('btn-outline-success');
+      btn.innerText = "🔁 Trocar para ponto";
+    } else {
+      btn.classList.remove('btn-outline-success');
+      btn.classList.add('btn-outline-primary');
+      btn.innerText = "🔁 Trocar para polígono";
+    }
+  }
 
-            ros.on('close', function() {
-                console.warn('Connection to ROSBridge closed.');
-            });
+  function deletePolygon() {
+    if (drawingPolygon) {
+      drawingPolygon.setMap(null);
+      drawingPolygon = null;
+    }
+  }
 
-            const gpsListener = new ROSLIB.Topic({
-                ros : ros,
-                name : '/web_gps_stream', // Adjust topic name if needed
-                messageType : 'std_msgs/String'
-            });
+  function addPoint(latLng) {
+    const species = document.getElementById('species').value;
+    const marker = new google.maps.Marker({
+      position: latLng, map: map, title: species,
+      animation: google.maps.Animation.DROP,
+      icon: 'http://maps.google.com/mapfiles/ms/icons/green-dot.png'
+    });
+    selectedPoints.push({ lat: latLng.lat(), lng: latLng.lng(), species, marker });
+    markers.push(marker);
+    updatePointsList(); fitMapToPoints();
+  }
 
-            const mudaListener = new ROSLIB.Topic({
-                ros: ros,
-                name : '/muda_alert',
-                messageType: 'std_msgs/String'
-            })
+  function deletePoint(index) {
+    selectedPoints[index].marker.setMap(null);
+    selectedPoints.splice(index, 1);
+    updatePointsList(); fitMapToPoints();
+  }
 
-            gpsListener.subscribe(function(message) {
-                const data = JSON.parse(message.data);
-                droneLatLng = new google.maps.LatLng(data.lat, data.lon);
+  function clearAllPoints() {
+    markers.forEach(marker => marker.setMap(null));
+    selectedPoints = []; markers = [];
+    updatePointsList();
+  }
 
-                if (!droneMarker) {
-                    droneMarker = new google.maps.Marker({
-                        position: droneLatLng,
-                        map: map,
-                        title: 'Drone Atual',
-                        icon: droneIcon
-                    });
-                } else {
-                    droneMarker.setPosition(droneLatLng);
-                }
-            });
+  function updatePointsList() {
+    const listDiv = document.getElementById('points-list');
+    listDiv.innerHTML = '';
+    selectedPoints.forEach((p, i) => {
+      const item = document.createElement('div');
+      item.className = 'point-item';
+      item.innerHTML = `<span>(${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}) - ${p.species}</span>
+        <button class="btn btn-sm btn-danger" onclick="deletePoint(${i})">
+          <span class="material-icons">delete</span>
+        </button>`;
+      listDiv.appendChild(item);
+    });
+  }
 
-            mudaListener.subscribe(function(message){
-                const data = JSON.parse(message.data)
-                const name = data
-                
-                mudaMarker =new google.maps.Marker({
-                    position: droneLatLng,
-                    map: map,
-                    title: name,
-                    icon: 'https://maps.gstatic.com/mapfiles/ms2/micons/tree.png'
+  function fitMapToPoints() {
+    if (selectedPoints.length === 0) return;
+    const bounds = new google.maps.LatLngBounds();
+    selectedPoints.forEach(p => bounds.extend(new google.maps.LatLng(p.lat, p.lng)));
+    map.fitBounds(bounds);
+  }
 
-                });
+  function submitPoints() {
+    if (selectedPoints.length === 0) {
+      Swal.fire('Nenhum ponto selecionado', 'Adicione ou importe pontos antes de enviar.', 'warning');
+      return;
+    }
+    const payload = selectedPoints.map(p => ({ lat: p.lat, lng: p.lng, species: p.species }));
+    final_payload = {payload, droneLatLng};
+    Swal.fire({
+      title: 'Enviar pontos?',
+      text: `Você está prestes a enviar ${payload.length} pontos.`,
+      icon: 'question', showCancelButton: true,
+      confirmButtonText: 'Enviar', cancelButtonText: 'Cancelar'
+    }).then((result) => {
+      if (result.isConfirmed) {
+        fetch('/submit_points', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(final_payload)
+        })
+        .then(r => Swal.fire(r.ok ? 'Sucesso!' : 'Erro!', r.ok ? 'Pontos enviados.' : 'Falha ao enviar.', r.ok ? 'success' : 'error'));
+      }
+    });
+  }
 
-                plantedPoints.push({
-                lat: droneLatLng.lat(),
-                lng: droneLatLng.lng(),
-                species: name
-                 });
+  function submitPolygon() {
+    if (!drawingPolygon) {
+      Swal.fire('Nenhum polígono', 'Desenhe um polígono antes de enviar.', 'warning');
+      return;
+    }
+    const path = drawingPolygon.getPath();
+    const coordinates = [];
+    for (let i = 0; i < path.getLength(); i++) {
+      const point = path.getAt(i);
+      coordinates.push({ lat: point.lat(), lng: point.lng() });
+    }
+    const metadata = drawingPolygon.customData || { Pequi: 0, Baru: 0, Capim: 0 };
+    fetch('/submit_polygon', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ polygon: coordinates, species: metadata })
+    })
+    .then(r => Swal.fire(r.ok ? 'Sucesso!' : 'Erro!', r.ok ? 'Polígono enviado.' : 'Falha ao enviar.', r.ok ? 'success' : 'error'));
+  }
 
-                document.getElementById('download-kml-btn').style.display = 'inline-block';
+  window.onload = initMap;
+</script>
 
-
-            })
-        };
-
-        function downloadKML() {
-            if (plantedPoints.length === 0) {
-                Swal.fire('Nenhuma muda plantada', 'Nenhum ponto disponível para exportação.', 'warning');
-                return;
-            }
-
-            let kml = `<?xml version="1.0" encoding="UTF-8"?>
-            <kml xmlns="http://www.opengis.net/kml/2.2">
-            <Document>\n`;
-
-            plantedPoints.forEach((point, index) => {
-                kml += `
-            <Placemark>
-            <name>${point.species}</name>
-            <Point>
-                <coordinates>${point.lng},${point.lat},0</coordinates>
-            </Point>
-            </Placemark>\n`;
-            });
-
-            kml += `  </Document>
-            </kml>`;
-
-            const blob = new Blob([kml], { type: 'application/vnd.google-earth.kml+xml' });
-            const url = URL.createObjectURL(blob);
-
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'mudas_plantadas.kml';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-        }
-    </script>
+</body>
+</html>
 
 </body>
 </html>
